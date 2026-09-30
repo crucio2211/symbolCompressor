@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Symbol Compressor - User Guide</title>
+</head>
+<body>
+
+<h1>Symbol Compressor</h1>
+<p><strong>Version:</strong> 3.0<br>
+<strong>Author:</strong> Rosendo Barde Hubilla Junior<br>
+<strong>Minimum NVDA Version:</strong> 2021.1</p>
+
+<h2>Overview</h2>
+<p>Symbol Compressor is an NVDA add-on that reduces the verbosity of repeated symbols and emojis in text. Instead of hearing "exclamation exclamation exclamation exclamation exclamation" for a string like "!!!!!", NVDA will simply say "5 exclamation". This makes reading text much faster and less annoying, especially on social media, chat apps, and web pages where people commonly use repeated punctuation or emojis.</p>
+
+<h2>Requirements</h2>
+<ul>
+<li>NVDA 2021.1 or later</li>
+</ul>
+
+<h2>Installation</h2>
+<ol>
+<li>Download the <code>symbolCompressor.nvda-addon</code> file.</li>
+<li>Open the file with NVDA (press Enter on it, or go to NVDA Menu &rarr; Tools &rarr; Manage Add-ons &rarr; Install).</li>
+<li>Follow the prompts and restart NVDA when asked.</li>
+</ol>
+
+<h2>How It Works</h2>
+<p>The add-on monitors every piece of text that NVDA is about to speak. When it detects a sequence of the same symbol or emoji repeated consecutively, it replaces it with a spoken count. For example:</p>
+<ul>
+<li><strong>!!!!!!</strong> becomes &rarr; <em>"6 exclamation"</em></li>
+<li><strong>---</strong> becomes &rarr; <em>"3 dash"</em></li>
+<li><strong>😂😂😂😂</strong> becomes &rarr; <em>"4 face with tears of joy"</em></li>
+</ul>
+<p>Compression only happens when the number of consecutive repetitions meets or exceeds the minimum count you configure. Below that threshold, the symbols are spoken normally.</p>
+<p>Symbol compression also respects your NVDA punctuation level setting. If your punctuation level is set to None, symbols will not be compressed since NVDA would not speak them anyway.</p>
+
+<h2>Supported Symbols</h2>
+<p>The following punctuation and special characters are supported for compression:</p>
+<p>. , ! ? ; : - _ = + * / &lt; &gt; @ # $ % ^ &amp; ( ) [ ] { } | \ " ' ` ~</p>
+
+<h2>Emoji Support</h2>
+<p>The add-on fully supports modern emoji sequences including:</p>
+<ul>
+<li>Standard emojis</li>
+<li>Emojis with skin tone modifiers</li>
+<li>Multi-part emojis joined with Zero-Width Joiner (e.g. family emojis)</li>
+<li>Emojis with variation selectors</li>
+</ul>
+<p>Emoji names are read from Unicode data, so NVDA will speak the official Unicode name of the emoji followed by the count.</p>
+<p><strong>Version 3.0</strong> adds support for Emoji 18.0 (Unicode 18.0, September 2026) — 9 new emojis, 19 sequences with skin tones:</p>
+<ul>
+<li>Cracking face</li>
+<li>Leftwards thumb sign (+ 5 skin tones)</li>
+<li>Rightwards thumb sign (+ 5 skin tones)</li>
+<li>Monarch butterfly</li>
+<li>Pickle</li>
+<li>Lighthouse</li>
+<li>Meteor</li>
+<li>Eraser</li>
+<li>Net with handle</li>
+</ul>
+
+<h2>Settings</h2>
+<p>You can configure Symbol Compressor by going to:</p>
+<p><strong>NVDA Menu &rarr; Preferences &rarr; Settings &rarr; Symbol Compressor</strong></p>
+<p>The following options are available:</p>
+
+<h3>Compress repeated symbols</h3>
+<p>Check this to enable compression of repeated punctuation and special characters. When unchecked, all symbols are spoken normally regardless of how many times they repeat. This is checked by default.</p>
+
+<h3>Minimum count for symbols</h3>
+<p>The number of times a symbol must repeat before it gets compressed. The range is 2 to 10, and the default is 3. For example, with the default of 3, the string "!!" (2 exclamations) is spoken normally, but "!!!" (3 exclamations) is compressed to "3 exclamation".</p>
+
+<h3>Compress repeated emojis</h3>
+<p>Check this to enable compression of repeated emojis. When unchecked, emojis are spoken individually. This is checked by default.</p>
+
+<h3>Minimum count for emojis</h3>
+<p>The number of times an emoji must repeat before it gets compressed. The range is 2 to 10, and the default is 3. Works the same way as the minimum count for symbols.</p>
+
+<h2>Uninstalling</h2>
+<ol>
+<li>Go to NVDA Menu &rarr; Tools &rarr; Manage Add-ons.</li>
+<li>Find <strong>Symbol and Emoji Compressor</strong> in the list.</li>
+<li>Press <strong>Disable</strong> or <strong>Remove</strong>.</li>
+<li>Restart NVDA when prompted.</li>
+</ol>
+
+</body>
+</html>

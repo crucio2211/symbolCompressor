@@ -61,6 +61,25 @@ BALLET_DANCER_SUFFIX = "\U0000200D\U0001FA70"
 class SymbolCompressorSettingsPanel(SettingsPanel):
 	title = "Symbol Compressor"
 
+	# Choices for the minimum-count dropdowns. Using wx.Choice instead of
+	# wx.SpinCtrl so users can only pick a valid value (no typing), which also
+	# guarantees onSave() can never fail on config validation and skip the
+	# remaining settings.
+	MIN_COUNT_CHOICES = [str(n) for n in range(2, 11)]
+
+	def _setDropdownToValue(self, dropdown, value):
+		try:
+			index = self.MIN_COUNT_CHOICES.index(str(int(value)))
+		except (ValueError, TypeError):
+			index = self.MIN_COUNT_CHOICES.index("3")
+		dropdown.SetSelection(index)
+
+	def _getDropdownValue(self, dropdown, fallback=3):
+		index = dropdown.GetSelection()
+		if 0 <= index < len(self.MIN_COUNT_CHOICES):
+			return int(self.MIN_COUNT_CHOICES[index])
+		return fallback
+
 	def makeSettings(self, settingsSizer):
 		sHelper = guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
 		
@@ -68,21 +87,23 @@ class SymbolCompressorSettingsPanel(SettingsPanel):
 		self.compressSymbolsCheckbox = sHelper.addItem(wx.CheckBox(self, label="Compress repeated symbols"))
 		self.compressSymbolsCheckbox.SetValue(config.conf["symbolCompressor"]["compressSymbols"])
 		
-		# Minimum count for symbols
-		self.minCountSymbolsSpinner = sHelper.addLabeledControl("Minimum count for symbols:", wx.SpinCtrl, min=2, max=10, initial=config.conf["symbolCompressor"]["minCountSymbols"])
+		# Minimum count for symbols (dropdown, valid values 2-10 only)
+		self.minCountSymbolsChoice = sHelper.addLabeledControl("Minimum count for symbols:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
+		self._setDropdownToValue(self.minCountSymbolsChoice, config.conf["symbolCompressor"]["minCountSymbols"])
 		
 		# Compress emojis checkbox
 		self.compressEmojisCheckbox = sHelper.addItem(wx.CheckBox(self, label="Compress repeated emojis"))
 		self.compressEmojisCheckbox.SetValue(config.conf["symbolCompressor"]["compressEmojis"])
 		
-		# Minimum count for emojis
-		self.minCountEmojisSpinner = sHelper.addLabeledControl("Minimum count for emojis:", wx.SpinCtrl, min=2, max=10, initial=config.conf["symbolCompressor"]["minCountEmojis"])
+		# Minimum count for emojis (dropdown, valid values 2-10 only)
+		self.minCountEmojisChoice = sHelper.addLabeledControl("Minimum count for emojis:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
+		self._setDropdownToValue(self.minCountEmojisChoice, config.conf["symbolCompressor"]["minCountEmojis"])
 
 	def onSave(self):
 		config.conf["symbolCompressor"]["compressSymbols"] = self.compressSymbolsCheckbox.GetValue()
-		config.conf["symbolCompressor"]["minCountSymbols"] = self.minCountSymbolsSpinner.GetValue()
+		config.conf["symbolCompressor"]["minCountSymbols"] = self._getDropdownValue(self.minCountSymbolsChoice)
 		config.conf["symbolCompressor"]["compressEmojis"] = self.compressEmojisCheckbox.GetValue()
-		config.conf["symbolCompressor"]["minCountEmojis"] = self.minCountEmojisSpinner.GetValue()
+		config.conf["symbolCompressor"]["minCountEmojis"] = self._getDropdownValue(self.minCountEmojisChoice)
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self):

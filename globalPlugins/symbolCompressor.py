@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 import config
 import gui
-from gui import guiHelper, NVDASettingsDialog
-from gui.settingsDialogs import SettingsPanel
+from gui import guiHelper
 import wx
 import globalPluginHandler
 import speech
+import ui
 import json
 import os
 import globalVars
+from logHandler import log
 
 # Own JSON settings file (same style as smartSpeakKeys), stored in the NVDA
 # user config folder so it persists across addon updates. This replaces the
@@ -159,77 +160,123 @@ SKIN_TONE_NAMES = {
 BALLET_DANCER_BASE = "\U0001F9D1"
 BALLET_DANCER_SUFFIX = "\U0000200D\U0001FA70"
 
-class SymbolCompressorSettingsPanel(SettingsPanel):
-	title = "Symbol Compressor"
+MIN_COUNT_CHOICES = ["Off", "2", "3", "4", "5"]
+MIN_COUNT_DEFAULT = 3
 
-	# Single dropdown per category: Off disables compression, otherwise the
-	# number is the minimum repeat count. wx.Choice is used (not SpinCtrl) so
-	# users can only pick a valid value (no typing), which also guarantees
-	# onSave() can never fail on config validation and skip other settings.
-	MIN_COUNT_CHOICES = ["Off", "2", "3", "4", "5"]
-	MIN_COUNT_DEFAULT = 3
 
-	def _setDropdown(self, dropdown, enabled, value):
-		# Migrates old configs: disabled -> Off, out-of-range counts clamped.
-		if not enabled:
-			dropdown.SetSelection(0)
-			return
-		try:
-			number = int(value)
-		except (ValueError, TypeError):
-			number = self.MIN_COUNT_DEFAULT
-		number = max(2, min(5, number))
-		dropdown.SetSelection(self.MIN_COUNT_CHOICES.index(str(number)))
+def valueToDropdownIndex(enabled, value):
+	# Migrates old configs: disabled -> Off, out-of-range counts clamped.
+	if not enabled:
+		return 0
+	try:
+		number = int(value)
+	except (ValueError, TypeError):
+		number = MIN_COUNT_DEFAULT
+	number = max(2, min(5, number))
+	return MIN_COUNT_CHOICES.index(str(number))
 
-	def _getDropdown(self, dropdown):
-		# Returns (enabled, minCount). Off -> (False, default).
-		index = dropdown.GetSelection()
-		if 0 < index < len(self.MIN_COUNT_CHOICES):
-			return True, int(self.MIN_COUNT_CHOICES[index])
-		return False, self.MIN_COUNT_DEFAULT
 
-	def makeSettings(self, settingsSizer):
-		sHelper = guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
+def dropdownIndexToValue(index):
+	# Returns (enabled, minCount). Off -> (False, default).
+	if 0 < index < len(MIN_COUNT_CHOICES):
+		return True, int(MIN_COUNT_CHOICES[index])
+	return False, MIN_COUNT_DEFAULT
+
+
+class SymbolCompressorDialog(wx.Dialog):
+	"""Standalone settings dialog opened from NVDA Menu -> Tools.
+
+	Uses an explicit save on OK (with success/error feedback) instead of an
+	NVDA Settings category panel, so save failures can never be silent.
+	"""
+
+	def __init__(self, parent):
+		super().__init__(parent, title="Symbol Compressor settings")
 		settings = loadSettings()
+		sizer = wx.BoxSizer(wx.VERTICAL)
+		helper = guiHelper.BoxSizerHelper(self, orientation=wx.VERTICAL)
 
-		# Compress symbols dropdown: Off, 2, 3, 4, 5
-		self.compressSymbolsChoice = sHelper.addLabeledControl("Compress repeated symbols:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
-		self._setDropdown(
-			self.compressSymbolsChoice,
-			settings["compressSymbols"],
-			settings["minCountSymbols"],
+		self.symbolsChoice = helper.addLabeledControl(
+			"Compress repeated symbols:", wx.Choice, choices=MIN_COUNT_CHOICES
+		)
+		self.symbolsChoice.SetSelection(
+			valueToDropdownIndex(settings["compressSymbols"], settings["minCountSymbols"])
 		)
 
-		# Compress emojis dropdown: Off, 2, 3, 4, 5
-		self.compressEmojisChoice = sHelper.addLabeledControl("Compress repeated emojis:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
-		self._setDropdown(
-			self.compressEmojisChoice,
-			settings["compressEmojis"],
-			settings["minCountEmojis"],
+		self.emojisChoice = helper.addLabeledControl(
+			"Compress repeated emojis:", wx.Choice, choices=MIN_COUNT_CHOICES
+		)
+		self.emojisChoice.SetSelection(
+			valueToDropdownIndex(settings["compressEmojis"], settings["minCountEmojis"])
 		)
 
-	def onSave(self):
-		symbolsEnabled, minSymbols = self._getDropdown(self.compressSymbolsChoice)
-		emojisEnabled, minEmojis = self._getDropdown(self.compressEmojisChoice)
-		saveSettings({
+		helper.addItem(wx.StaticText(self, label="Settings file: " + _settingsFilePath()))
+		helper.addDialogDismissButtons(self.CreateButtonSizer(wx.OK | wx.CANCEL))
+		sizer.Add(helper.sizer, border=guiHelper.BORDER_FOR_DIALOGS, flag=wx.ALL)
+		sizer.Fit(self)
+		self.SetSizer(sizer)
+		self.CentreOnScreen()
+
+		self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
+		self.Bind(wx.EVT_BUTTON, self.onCancel, id=wx.ID_CANCEL)
+
+	def onOk(self, event):
+		symbolsEnabled, minSymbols = dropdownIndexToValue(self.symbolsChoice.GetSelection())
+		emojisEnabled, minEmojis = dropdownIndexToValue(self.emojisChoice.GetSelection())
+		ok = saveSettings({
 			"compressSymbols": symbolsEnabled,
 			"minCountSymbols": minSymbols,
 			"compressEmojis": emojisEnabled,
 			"minCountEmojis": minEmojis,
 		})
+		if ok:
+			log.info("symbolCompressor: settings saved to %s", _settingsFilePath())
+			ui.message("Symbol Compressor settings saved")
+		else:
+			log.error("symbolCompressor: FAILED to save settings to %s", _settingsFilePath())
+			gui.messageBox(
+				"Could not save settings to:\n" + _settingsFilePath(),
+				"Symbol Compressor",
+				wx.OK | wx.ICON_ERROR,
+			)
+		self.Destroy()
+
+	def onCancel(self, event):
+		self.Destroy()
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self):
 		super(GlobalPlugin, self).__init__()
-		NVDASettingsDialog.categoryClasses.append(SymbolCompressorSettingsPanel)
 		self._originalSpeak = speech.speech.speak
 		speech.speech.speak = self._compressingSpeak
-	
-	def terminate(self):
-		speech.speech.speak = self._originalSpeak
+		self._toolsMenuItem = None
 		try:
-			NVDASettingsDialog.categoryClasses.remove(SymbolCompressorSettingsPanel)
-		except:
+			toolsMenu = gui.mainFrame.sysTrayIcon.toolsMenu
+			self._toolsMenuItem = toolsMenu.Append(wx.ID_ANY, "Symbol Compressor settings...")
+			gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onToolsMenu, self._toolsMenuItem)
+		except Exception:
+			log.exception("symbolCompressor: could not add Tools menu item")
+			self._toolsMenuItem = None
+
+	def onToolsMenu(self, event):
+		gui.mainFrame.prePopup()
+		try:
+			dialog = SymbolCompressorDialog(gui.mainFrame)
+			dialog.ShowModal()
+			dialog.Destroy()
+		finally:
+			gui.mainFrame.postPopup()
+
+	def terminate(self):
+		try:
+			if self._toolsMenuItem is not None:
+				gui.mainFrame.sysTrayIcon.toolsMenu.Remove(self._toolsMenuItem)
+				self._toolsMenuItem = None
+		except Exception:
+			pass
+		try:
+			speech.speech.speak = self._originalSpeak
+		except Exception:
 			pass
 		super(GlobalPlugin, self).terminate()
 	

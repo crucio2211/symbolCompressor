@@ -24,7 +24,7 @@ Instead of hearing "exclamation exclamation exclamation", you'll hear "3 exclama
   - Meteor
   - Eraser
   - Net with handle
-- Configurable via NVDA Menu → Tools → Symbol Compressor settings (per-category dropdown: Off, 2, 3, 4, 5)
+- Configurable in NVDA Settings → Symbol Compressor (per-category dropdown: Off, 2, 3, 4, 5)
 - Respects NVDA punctuation/symbol level
 
 ## Install

@@ -1,121 +1,67 @@
 # -*- coding: utf-8 -*-
 import config
 import gui
-from gui import guiHelper
+from gui import guiHelper, NVDASettingsDialog
+from gui.settingsDialogs import SettingsPanel
 import wx
 import globalPluginHandler
 import speech
-import ui
 import json
 import os
-import globalVars
-from logHandler import log
 
-# Own JSON settings file (same style as smartSpeakKeys), stored in the NVDA
-# user config folder so it persists across addon updates. This replaces the
-# old nvda.ini [symbolCompressor] section, which proved unreliable.
-SETTINGS_FILENAME = "symbolCompressor_settings.json"
-
-DEFAULT_SETTINGS = {
-	"compressSymbols": True,
-	"minCountSymbols": 3,
-	"compressEmojis": True,
-	"minCountEmojis": 3,
+confspec = {
+	"minCountSymbols": "integer(default=3, min=2, max=5)",
+	"minCountEmojis": "integer(default=3, min=2, max=5)",
+	"compressSymbols": "boolean(default=True)",
+	"compressEmojis": "boolean(default=True)",
 }
-
-_settingsCache = None
-
-
-def _settingsFilePath():
-	try:
-		return os.path.join(globalVars.appArgs.configPath, SETTINGS_FILENAME)
-	except Exception:
-		return os.path.join(os.path.dirname(__file__), SETTINGS_FILENAME)
+config.conf.spec["symbolCompressor"] = confspec
 
 
-def _migrateFromIni():
-	"""One-time migration of the old nvda.ini [symbolCompressor] values."""
-	migrated = {}
-	try:
-		section = config.conf["symbolCompressor"]
-	except Exception:
-		return migrated
-	try:
-		if "compressSymbols" in section:
-			migrated["compressSymbols"] = bool(section.get("compressSymbols", True))
-		if "compressEmojis" in section:
-			migrated["compressEmojis"] = bool(section.get("compressEmojis", True))
-		for key in ("minCountSymbols", "minCountEmojis"):
-			if key in section:
-				try:
-					number = int(section.get(key, 3))
-				except (ValueError, TypeError):
-					continue
-				migrated[key] = max(2, min(5, number))
-	except Exception:
-		pass
-	return migrated
+def _migrateJsonToIni():
+	"""One-time migration of symbolCompressor_settings.json back into nvda.ini.
 
-
-def loadSettings(forceReload=False):
-	"""Load settings from the JSON file, merged over defaults.
-
-	Migrates old nvda.ini values on first run (when no JSON file exists yet).
+	Runs at import time; removes the JSON file after a successful migration.
 	"""
-	global _settingsCache
-	if _settingsCache is not None and not forceReload:
-		return _settingsCache
-	settings = dict(DEFAULT_SETTINGS)
-	path = _settingsFilePath()
-	if os.path.exists(path):
-		try:
-			with open(path, "r", encoding="utf-8") as f:
-				saved = json.load(f)
-			if isinstance(saved, dict):
-				settings.update(saved)
-		except Exception:
-			pass
-	else:
-		migrated = _migrateFromIni()
-		if migrated:
-			settings.update(migrated)
-			saveSettings(settings)
-	# Sanitize types in case the file was hand-edited.
+	filename = "symbolCompressor_settings.json"
+	candidates = []
 	try:
-		settings["compressSymbols"] = bool(settings.get("compressSymbols", True))
-		settings["compressEmojis"] = bool(settings.get("compressEmojis", True))
-		for key in ("minCountSymbols", "minCountEmojis"):
-			try:
-				settings[key] = max(2, min(5, int(settings.get(key, 3))))
-			except (ValueError, TypeError):
-				settings[key] = 3
+		import globalVars
+		candidates.append(os.path.join(globalVars.appArgs.configPath, filename))
 	except Exception:
 		pass
-	_settingsCache = settings
-	return settings
-
-
-def saveSettings(settings):
-	"""Save settings dict to the JSON file (and refresh the cache)."""
-	global _settingsCache
-	clean = {
-		"compressSymbols": bool(settings.get("compressSymbols", True)),
-		"compressEmojis": bool(settings.get("compressEmojis", True)),
-		"minCountSymbols": settings.get("minCountSymbols", 3),
-		"minCountEmojis": settings.get("minCountEmojis", 3),
-	}
-	for key in ("minCountSymbols", "minCountEmojis"):
-		try:
-			clean[key] = max(2, min(5, int(clean[key])))
-		except (ValueError, TypeError):
-			clean[key] = 3
 	try:
-		with open(_settingsFilePath(), "w", encoding="utf-8") as f:
-			json.dump(clean, f, indent=2)
-		_settingsCache = clean
-		return True
+		candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), filename))
 	except Exception:
-		return False
+		pass
+	path = next((p for p in candidates if p and os.path.exists(p)), None)
+	if not path:
+		return
+	try:
+		with open(path, "r", encoding="utf-8") as f:
+			saved = json.load(f)
+		if not isinstance(saved, dict):
+			return
+		section = config.conf["symbolCompressor"]
+		if "compressSymbols" in saved:
+			section["compressSymbols"] = bool(saved["compressSymbols"])
+		if "compressEmojis" in saved:
+			section["compressEmojis"] = bool(saved["compressEmojis"])
+		for key in ("minCountSymbols", "minCountEmojis"):
+			if key in saved:
+				try:
+					section[key] = max(2, min(5, int(saved[key])))
+				except (ValueError, TypeError):
+					pass
+	except Exception:
+		return
+	try:
+		os.remove(path)
+	except Exception:
+		pass
+
+
+_migrateJsonToIni()
 
 # Emoji 17.0 (Unicode 17.0, released Sept 2025) additions.
 # These are provided as a fallback name table because unicodedata.name()
@@ -183,104 +129,53 @@ def dropdownIndexToValue(index):
 	return False, MIN_COUNT_DEFAULT
 
 
-class SymbolCompressorDialog(wx.Dialog):
-	"""Standalone settings dialog opened from NVDA Menu -> Tools.
+class SymbolCompressorSettingsPanel(SettingsPanel):
+	title = "Symbol Compressor"
 
-	Uses an explicit save on OK (with success/error feedback) instead of an
-	NVDA Settings category panel, so save failures can never be silent.
-	"""
+	def makeSettings(self, settingsSizer):
+		sHelper = guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
 
-	def __init__(self, parent):
-		super().__init__(parent, title="Symbol Compressor settings")
-		settings = loadSettings()
-		sizer = wx.BoxSizer(wx.VERTICAL)
-		helper = guiHelper.BoxSizerHelper(self, orientation=wx.VERTICAL)
-
-		self.symbolsChoice = helper.addLabeledControl(
+		self.symbolsChoice = sHelper.addLabeledControl(
 			"Compress repeated symbols:", wx.Choice, choices=MIN_COUNT_CHOICES
 		)
-		self.symbolsChoice.SetSelection(
-			valueToDropdownIndex(settings["compressSymbols"], settings["minCountSymbols"])
-		)
+		self.symbolsChoice.SetSelection(valueToDropdownIndex(
+			config.conf["symbolCompressor"]["compressSymbols"],
+			config.conf["symbolCompressor"]["minCountSymbols"],
+		))
 
-		self.emojisChoice = helper.addLabeledControl(
+		self.emojisChoice = sHelper.addLabeledControl(
 			"Compress repeated emojis:", wx.Choice, choices=MIN_COUNT_CHOICES
 		)
-		self.emojisChoice.SetSelection(
-			valueToDropdownIndex(settings["compressEmojis"], settings["minCountEmojis"])
-		)
+		self.emojisChoice.SetSelection(valueToDropdownIndex(
+			config.conf["symbolCompressor"]["compressEmojis"],
+			config.conf["symbolCompressor"]["minCountEmojis"],
+		))
 
-		helper.addItem(wx.StaticText(self, label="Settings file: " + _settingsFilePath()))
-		helper.addDialogDismissButtons(self.CreateButtonSizer(wx.OK | wx.CANCEL))
-		sizer.Add(helper.sizer, border=guiHelper.BORDER_FOR_DIALOGS, flag=wx.ALL)
-		sizer.Fit(self)
-		self.SetSizer(sizer)
-		self.CentreOnScreen()
-
-		self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
-		self.Bind(wx.EVT_BUTTON, self.onCancel, id=wx.ID_CANCEL)
-
-	def onOk(self, event):
+	def onSave(self):
 		symbolsEnabled, minSymbols = dropdownIndexToValue(self.symbolsChoice.GetSelection())
 		emojisEnabled, minEmojis = dropdownIndexToValue(self.emojisChoice.GetSelection())
-		ok = saveSettings({
-			"compressSymbols": symbolsEnabled,
-			"minCountSymbols": minSymbols,
-			"compressEmojis": emojisEnabled,
-			"minCountEmojis": minEmojis,
-		})
-		if ok:
-			log.info("symbolCompressor: settings saved to %s", _settingsFilePath())
-			ui.message("Symbol Compressor settings saved")
-		else:
-			log.error("symbolCompressor: FAILED to save settings to %s", _settingsFilePath())
-			gui.messageBox(
-				"Could not save settings to:\n" + _settingsFilePath(),
-				"Symbol Compressor",
-				wx.OK | wx.ICON_ERROR,
-			)
-		self.Destroy()
-
-	def onCancel(self, event):
-		self.Destroy()
+		config.conf["symbolCompressor"]["compressSymbols"] = symbolsEnabled
+		config.conf["symbolCompressor"]["minCountSymbols"] = minSymbols
+		config.conf["symbolCompressor"]["compressEmojis"] = emojisEnabled
+		config.conf["symbolCompressor"]["minCountEmojis"] = minEmojis
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self):
 		super(GlobalPlugin, self).__init__()
+		NVDASettingsDialog.categoryClasses.append(SymbolCompressorSettingsPanel)
 		self._originalSpeak = speech.speech.speak
 		speech.speech.speak = self._compressingSpeak
-		self._toolsMenuItem = None
-		try:
-			toolsMenu = gui.mainFrame.sysTrayIcon.toolsMenu
-			self._toolsMenuItem = toolsMenu.Append(wx.ID_ANY, "Symbol Compressor settings...")
-			gui.mainFrame.sysTrayIcon.Bind(wx.EVT_MENU, self.onToolsMenu, self._toolsMenuItem)
-		except Exception:
-			log.exception("symbolCompressor: could not add Tools menu item")
-			self._toolsMenuItem = None
-		log.info("symbolCompressor: loaded settings %s", loadSettings())
-
-	def onToolsMenu(self, event):
-		# Note: the dialog destroys itself in onOk/onCancel (same pattern as
-		# NVDA core dialogs), so it must NOT be destroyed again here, or a
-		# RuntimeError (double Destroy) is raised.
-		gui.mainFrame.prePopup()
-		try:
-			dialog = SymbolCompressorDialog(gui.mainFrame)
-			dialog.ShowModal()
-		finally:
-			gui.mainFrame.postPopup()
 
 	def terminate(self):
-		try:
-			if self._toolsMenuItem is not None:
-				gui.mainFrame.sysTrayIcon.toolsMenu.Remove(self._toolsMenuItem)
-				self._toolsMenuItem = None
-		except Exception:
-			pass
 		try:
 			speech.speech.speak = self._originalSpeak
 		except Exception:
 			pass
+		try:
+			NVDASettingsDialog.categoryClasses.remove(SymbolCompressorSettingsPanel)
+		except Exception:
+			pass
+		super(GlobalPlugin, self).terminate()
 		super(GlobalPlugin, self).terminate()
 	
 	def _compressingSpeak(self, speechSequence, *args, **kwargs):
@@ -302,14 +197,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			pass
 		
 		# If symbol compression is disabled and we shouldn't process, return as-is
-		settings = loadSettings()
-		if not shouldProcessSymbols and not settings["compressEmojis"]:
+		section = config.conf["symbolCompressor"]
+		if not shouldProcessSymbols and not section["compressEmojis"]:
 			return sequence
 		
-		minCountSymbols = settings["minCountSymbols"]
-		minCountEmojis = settings["minCountEmojis"]
-		compressSymbolsEnabled = settings["compressSymbols"]
-		compressEmojisEnabled = settings["compressEmojis"]
+		minCountSymbols = section["minCountSymbols"]
+		minCountEmojis = section["minCountEmojis"]
+		compressSymbolsEnabled = section["compressSymbols"]
+		compressEmojisEnabled = section["compressEmojis"]
 		newSeq = []
 		for item in sequence:
 			if isinstance(item, str):

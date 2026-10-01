@@ -6,14 +6,115 @@ from gui.settingsDialogs import SettingsPanel
 import wx
 import globalPluginHandler
 import speech
+import json
+import os
+import globalVars
 
-confspec = {
-	"minCountSymbols": "integer(default=3, min=2, max=10)",
-	"minCountEmojis": "integer(default=3, min=2, max=10)",
-	"compressSymbols": "boolean(default=True)",
-	"compressEmojis": "boolean(default=True)",
+# Own JSON settings file (same style as smartSpeakKeys), stored in the NVDA
+# user config folder so it persists across addon updates. This replaces the
+# old nvda.ini [symbolCompressor] section, which proved unreliable.
+SETTINGS_FILENAME = "symbolCompressor_settings.json"
+
+DEFAULT_SETTINGS = {
+	"compressSymbols": True,
+	"minCountSymbols": 3,
+	"compressEmojis": True,
+	"minCountEmojis": 3,
 }
-config.conf.spec["symbolCompressor"] = confspec
+
+_settingsCache = None
+
+
+def _settingsFilePath():
+	try:
+		return os.path.join(globalVars.appArgs.configPath, SETTINGS_FILENAME)
+	except Exception:
+		return os.path.join(os.path.dirname(__file__), SETTINGS_FILENAME)
+
+
+def _migrateFromIni():
+	"""One-time migration of the old nvda.ini [symbolCompressor] values."""
+	migrated = {}
+	try:
+		section = config.conf["symbolCompressor"]
+	except Exception:
+		return migrated
+	try:
+		if "compressSymbols" in section:
+			migrated["compressSymbols"] = bool(section.get("compressSymbols", True))
+		if "compressEmojis" in section:
+			migrated["compressEmojis"] = bool(section.get("compressEmojis", True))
+		for key in ("minCountSymbols", "minCountEmojis"):
+			if key in section:
+				try:
+					number = int(section.get(key, 3))
+				except (ValueError, TypeError):
+					continue
+				migrated[key] = max(2, min(5, number))
+	except Exception:
+		pass
+	return migrated
+
+
+def loadSettings(forceReload=False):
+	"""Load settings from the JSON file, merged over defaults.
+
+	Migrates old nvda.ini values on first run (when no JSON file exists yet).
+	"""
+	global _settingsCache
+	if _settingsCache is not None and not forceReload:
+		return _settingsCache
+	settings = dict(DEFAULT_SETTINGS)
+	path = _settingsFilePath()
+	if os.path.exists(path):
+		try:
+			with open(path, "r", encoding="utf-8") as f:
+				saved = json.load(f)
+			if isinstance(saved, dict):
+				settings.update(saved)
+		except Exception:
+			pass
+	else:
+		migrated = _migrateFromIni()
+		if migrated:
+			settings.update(migrated)
+			saveSettings(settings)
+	# Sanitize types in case the file was hand-edited.
+	try:
+		settings["compressSymbols"] = bool(settings.get("compressSymbols", True))
+		settings["compressEmojis"] = bool(settings.get("compressEmojis", True))
+		for key in ("minCountSymbols", "minCountEmojis"):
+			try:
+				settings[key] = max(2, min(5, int(settings.get(key, 3))))
+			except (ValueError, TypeError):
+				settings[key] = 3
+	except Exception:
+		pass
+	_settingsCache = settings
+	return settings
+
+
+def saveSettings(settings):
+	"""Save settings dict to the JSON file (and refresh the cache)."""
+	global _settingsCache
+	clean = {
+		"compressSymbols": bool(settings.get("compressSymbols", True)),
+		"compressEmojis": bool(settings.get("compressEmojis", True)),
+		"minCountSymbols": settings.get("minCountSymbols", 3),
+		"minCountEmojis": settings.get("minCountEmojis", 3),
+	}
+	for key in ("minCountSymbols", "minCountEmojis"):
+		try:
+			clean[key] = max(2, min(5, int(clean[key])))
+		except (ValueError, TypeError):
+			clean[key] = 3
+	try:
+		with open(_settingsFilePath(), "w", encoding="utf-8") as f:
+			json.dump(clean, f, indent=2)
+		_settingsCache = clean
+		return True
+	except Exception:
+		return False
 
 # Emoji 17.0 (Unicode 17.0, released Sept 2025) additions.
 # These are provided as a fallback name table because unicodedata.name()
@@ -89,30 +190,33 @@ class SymbolCompressorSettingsPanel(SettingsPanel):
 
 	def makeSettings(self, settingsSizer):
 		sHelper = guiHelper.BoxSizerHelper(self, sizer=settingsSizer)
+		settings = loadSettings()
 
 		# Compress symbols dropdown: Off, 2, 3, 4, 5
 		self.compressSymbolsChoice = sHelper.addLabeledControl("Compress repeated symbols:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
 		self._setDropdown(
 			self.compressSymbolsChoice,
-			config.conf["symbolCompressor"]["compressSymbols"],
-			config.conf["symbolCompressor"]["minCountSymbols"],
+			settings["compressSymbols"],
+			settings["minCountSymbols"],
 		)
 
 		# Compress emojis dropdown: Off, 2, 3, 4, 5
 		self.compressEmojisChoice = sHelper.addLabeledControl("Compress repeated emojis:", wx.Choice, choices=self.MIN_COUNT_CHOICES)
 		self._setDropdown(
 			self.compressEmojisChoice,
-			config.conf["symbolCompressor"]["compressEmojis"],
-			config.conf["symbolCompressor"]["minCountEmojis"],
+			settings["compressEmojis"],
+			settings["minCountEmojis"],
 		)
 
 	def onSave(self):
 		symbolsEnabled, minSymbols = self._getDropdown(self.compressSymbolsChoice)
 		emojisEnabled, minEmojis = self._getDropdown(self.compressEmojisChoice)
-		config.conf["symbolCompressor"]["compressSymbols"] = symbolsEnabled
-		config.conf["symbolCompressor"]["minCountSymbols"] = minSymbols
-		config.conf["symbolCompressor"]["compressEmojis"] = emojisEnabled
-		config.conf["symbolCompressor"]["minCountEmojis"] = minEmojis
+		saveSettings({
+			"compressSymbols": symbolsEnabled,
+			"minCountSymbols": minSymbols,
+			"compressEmojis": emojisEnabled,
+			"minCountEmojis": minEmojis,
+		})
 
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self):
@@ -148,20 +252,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			pass
 		
 		# If symbol compression is disabled and we shouldn't process, return as-is
-		if not shouldProcessSymbols and not config.conf["symbolCompressor"]["compressEmojis"]:
+		settings = loadSettings()
+		if not shouldProcessSymbols and not settings["compressEmojis"]:
 			return sequence
 		
-		minCountSymbols = config.conf["symbolCompressor"]["minCountSymbols"]
-		minCountEmojis = config.conf["symbolCompressor"]["minCountEmojis"]
+		minCountSymbols = settings["minCountSymbols"]
+		minCountEmojis = settings["minCountEmojis"]
+		compressSymbolsEnabled = settings["compressSymbols"]
+		compressEmojisEnabled = settings["compressEmojis"]
 		newSeq = []
 		for item in sequence:
 			if isinstance(item, str):
-				newSeq.append(self._compressString(item, minCountSymbols, minCountEmojis, shouldProcessSymbols))
+				newSeq.append(self._compressString(item, minCountSymbols, minCountEmojis, shouldProcessSymbols, compressSymbolsEnabled, compressEmojisEnabled))
 			else:
 				newSeq.append(item)
 		return newSeq
 	
-	def _compressString(self, text, minCountSymbols, minCountEmojis, shouldProcessSymbols):
+	def _compressString(self, text, minCountSymbols, minCountEmojis, shouldProcessSymbols, compressSymbolsEnabled=True, compressEmojisEnabled=True):
 		if not text:
 			return text
 		
@@ -171,7 +278,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			# Get emoji sequence (may include variation selectors, skin tones, ZWJ sequences)
 			emojiSeq, emojiLen = self._getEmojiSequence(text, i)
 			
-			if emojiSeq and config.conf["symbolCompressor"]["compressEmojis"]:
+			if emojiSeq and compressEmojisEnabled:
 				# Normalize for comparison (removes variation selectors)
 				normalizedEmoji = self._normalizeEmoji(emojiSeq)
 				
@@ -198,7 +305,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			
 			# Handle single character symbols - only if shouldProcessSymbols is True
 			char = text[i]
-			if shouldProcessSymbols and config.conf["symbolCompressor"]["compressSymbols"] and char in ".,!?;:-_=+*/<>@#$%^&()[]{}|\\\"'`~":
+			if shouldProcessSymbols and compressSymbolsEnabled and char in ".,!?;:-_=+*/<>@#$%^&()[]{}|\\\"'`~":
 				count = 1
 				j = i + 1
 				while j < len(text) and text[j] == char:

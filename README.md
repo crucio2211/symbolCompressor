@@ -27,6 +27,27 @@ Instead of hearing "exclamation exclamation exclamation", you'll hear "3 exclama
 - Configurable in NVDA Settings → Symbol Compressor (per-category dropdown: Off, 2, 3, 4, 5)
 - Respects NVDA punctuation/symbol level
 
+## Important note about Off
+
+Off means "let NVDA do its default". NVDA itself collapses any identical
+character repeated 4 or more times into "N name" (built-in `characterProcessing`
+repetition rule, no off switch — see
+[nvaccess/nvda#20605](https://github.com/nvaccess/nvda/issues/20605)).
+So with Off, 3 emojis are spoken individually but 4+ become e.g.
+"4 smiling face with heart-eyes". Hearing every repeat individually at 4+
+is currently not possible in NVDA.
+
+## Changelog
+
+### 3.0
+
+- Emoji 18.0 support (Unicode 18.0, September 2026): cracking face,
+  leftwards/rightwards thumb sign with skin tones, monarch butterfly,
+  pickle, lighthouse, meteor, eraser, net with handle.
+- Settings are now per-category dropdowns (Off, 2, 3, 4, 5) in
+  NVDA Settings → Symbol Compressor; no more typing values.
+- Tested up to NVDA 2026.2.
+
 ## Install
 
 1. Download the latest `symbolCompressor_vX_X.nvda-addon` from Releases.

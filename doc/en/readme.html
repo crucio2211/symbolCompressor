@@ -73,6 +73,18 @@
 <h3>Compress repeated emojis</h3>
 <p>A dropdown with the choices Off, 2, 3, 4 and 5. Choose Off to speak emojis individually, or choose a number to compress repeated emojis that repeat that many times or more. The default is 3.</p>
 
+<h3>Important note about Off</h3>
+<p>Off means "let NVDA do its default". NVDA itself collapses any identical character repeated 4 or more times into "N name" (built-in repetition rule, no off switch). So with Off, 3 emojis are spoken individually but 4 or more become for example "4 smiling face with heart-eyes". Hearing every repeat individually at 4 or more is currently not possible in NVDA.</p>
+
+<h2>Changes</h2>
+
+<h3>Version 3.0</h3>
+<ul>
+<li>Added support for Emoji 18.0 (Unicode 18.0, September 2026): cracking face, leftwards and rightwards thumb sign with skin tones, monarch butterfly, pickle, lighthouse, meteor, eraser and net with handle.</li>
+<li>Settings are now per-category dropdowns (Off, 2, 3, 4 and 5) in NVDA Settings &rarr; Symbol Compressor; values can no longer be typed.</li>
+<li>Tested up to NVDA 2026.2.</li>
+</ul>
+
 <h2>Uninstalling</h2>
 <ol>
 <li>Go to NVDA Menu &rarr; Tools &rarr; Manage Add-ons.</li>

@@ -6,7 +6,7 @@ Instead of hearing "exclamation exclamation exclamation", you'll hear "3 exclama
 - Add-on name: `symbolCompressor`
 - Author: Rosendo Barde Hubilla Junior
 - Current version: 3.0
-- Minimum NVDA: 2021.1, Last tested: 2026.3
+- Minimum NVDA: 2021.1, Last tested: 2026.2
 
 ## Features
 

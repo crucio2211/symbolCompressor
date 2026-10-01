@@ -257,13 +257,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			log.exception("symbolCompressor: could not add Tools menu item")
 			self._toolsMenuItem = None
+		log.info("symbolCompressor: loaded settings %s", loadSettings())
 
 	def onToolsMenu(self, event):
+		# Note: the dialog destroys itself in onOk/onCancel (same pattern as
+		# NVDA core dialogs), so it must NOT be destroyed again here, or a
+		# RuntimeError (double Destroy) is raised.
 		gui.mainFrame.prePopup()
 		try:
 			dialog = SymbolCompressorDialog(gui.mainFrame)
 			dialog.ShowModal()
-			dialog.Destroy()
 		finally:
 			gui.mainFrame.postPopup()
 

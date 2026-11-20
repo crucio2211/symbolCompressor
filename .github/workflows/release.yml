@@ -1,0 +1,92 @@
+name: Build and publish NVDA add-on release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - manifest.ini
+      - .github/workflows/release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build and verify add-on
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile globalPlugins/symbolCompressor.py
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+          import re
+
+          manifest = Path("manifest.ini").read_text(encoding="utf-8")
+          match = re.search(r"^version\\s*=\\s*(.+)$", manifest, re.MULTILINE)
+          if not match:
+              raise SystemExit("Could not read add-on version from manifest.ini")
+
+          version = match.group(1).strip()
+          asset = f"symbolCompressor_v{version.replace('.', '_')}.nvda-addon"
+          files = (
+              "manifest.ini",
+              "globalPlugins/symbolCompressor.py",
+              "doc/en/readme.html",
+          )
+          for filename in files:
+              if not Path(filename).is_file():
+                  raise SystemExit(f"Required add-on file is missing: {filename}")
+
+          with ZipFile(asset, "w", compression=ZIP_DEFLATED, compresslevel=9) as archive:
+              for filename in files:
+                  archive.write(filename, arcname=filename)
+
+          with ZipFile(asset, "r") as archive:
+              bad_file = archive.testzip()
+              if bad_file:
+                  raise SystemExit(f"Corrupt archive member: {bad_file}")
+              if set(archive.namelist()) != set(files):
+                  raise SystemExit("Unexpected contents in add-on package")
+
+          print(f"Built and verified {asset}")
+          with open("addon-asset.txt", "w", encoding="utf-8") as output:
+              output.write(asset)
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's/^version[[:space:]]*=[[:space:]]*//p' manifest.ini | head -n 1)"
+          TAG="v${VERSION}"
+          ASSET="$(cat addon-asset.txt)"
+          NOTES="$(mktemp)"
+          cat > "$NOTES" <<'EOF'
+          ## Changes in v3.1
+
+          - Compressed punctuation and emoji names now use NVDA's active speech language and localized symbol/Unicode CLDR dictionaries.
+          - Language-change commands are respected when NVDA reads mixed-language text.
+          - A compatibility fallback remains for older NVDA versions or missing locale entries.
+          EOF
+
+          gh release create "$TAG" "$ASSET" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG - Localized symbols and emojis" \
+            --notes-file "$NOTES"

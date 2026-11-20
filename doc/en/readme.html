@@ -7,7 +7,7 @@
 <body>
 
 <h1>Symbol Compressor</h1>
-<p><strong>Version:</strong> 3.0<br>
+<p><strong>Version:</strong> 3.1<br>
 <strong>Author:</strong> Rosendo Barde Hubilla Junior<br>
 <strong>Minimum NVDA Version:</strong> 2021.1</p>
 
@@ -48,7 +48,7 @@
 <li>Multi-part emojis joined with Zero-Width Joiner (e.g. family emojis)</li>
 <li>Emojis with variation selectors</li>
 </ul>
-<p>Emoji names are read from Unicode data, so NVDA will speak the official Unicode name of the emoji followed by the count.</p>
+<p>Compressed symbol and emoji names use NVDA's active speech language and its localized symbol dictionaries, including Unicode CLDR data for emoji. The add-on also follows language-change commands in mixed-language speech sequences. When a locale does not provide a matching description, the add-on keeps a compatibility fallback.</p>
 <p><strong>Version 3.0</strong> adds support for Emoji 18.0 (Unicode 18.0, September 2026) — 9 new emojis, 19 sequences with skin tones:</p>
 <ul>
 <li>Cracking face</li>
@@ -77,6 +77,13 @@
 <p>Off means "let NVDA do its default". NVDA itself collapses any identical character repeated 4 or more times into "N name" (built-in repetition rule, no off switch). So with Off, 3 emojis are spoken individually but 4 or more become for example "4 smiling face with heart-eyes". Hearing every repeat individually at 4 or more is currently not possible in NVDA.</p>
 
 <h2>Changes</h2>
+
+<h3>Version 3.1</h3>
+<ul>
+<li>Localized compressed punctuation and emoji names using NVDA's built-in speech symbol processing and Unicode CLDR data.</li>
+<li>Uses the active NVDA speech language and follows language-change commands in mixed-language speech sequences.</li>
+<li>Retains a compatibility fallback for older NVDA versions or missing locale entries.</li>
+</ul>
 
 <h3>Version 3.0</h3>
 <ul>

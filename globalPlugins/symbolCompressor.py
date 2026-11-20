@@ -6,6 +6,9 @@ from gui.settingsDialogs import SettingsPanel
 import wx
 import globalPluginHandler
 import speech
+import characterProcessing
+from speech.commands import LangChangeCommand
+from speech import languageHandling
 import json
 import os
 
@@ -185,35 +188,51 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _compressSequence(self, sequence):
 		# Check current symbol level
 		# Symbol levels: 0=NONE, 100=SOME, 200=MOST, 300=ALL
-		# Only compress when symbol level is NOT NONE (user wants to hear symbols)
+		# Only compress symbols when symbol level is NOT NONE.
 		shouldProcessSymbols = True
 		try:
 			symbolLevel = config.conf["speech"]["symbolLevel"]
-			# If symbol level is NONE (0), user doesn't want to hear symbols at all
-			# So don't compress them either (respect NVDA's decision to not speak them)
 			if symbolLevel == 0:
 				shouldProcessSymbols = False
-		except:
+		except Exception:
 			pass
-		
-		# If symbol compression is disabled and we shouldn't process, return as-is
+
 		section = config.conf["symbolCompressor"]
 		if not shouldProcessSymbols and not section["compressEmojis"]:
 			return sequence
-		
+
 		minCountSymbols = section["minCountSymbols"]
 		minCountEmojis = section["minCountEmojis"]
 		compressSymbolsEnabled = section["compressSymbols"]
 		compressEmojisEnabled = section["compressEmojis"]
+
+		# Use the same language selection as NVDA. Follow language-change
+		# commands so mixed-language text is compressed using the right locale.
+		defaultLocale = speech.getCurrentLanguage()
+		currentLocale = defaultLocale
 		newSeq = []
 		for item in sequence:
-			if isinstance(item, str):
-				newSeq.append(self._compressString(item, minCountSymbols, minCountEmojis, shouldProcessSymbols, compressSymbolsEnabled, compressEmojisEnabled))
+			if isinstance(item, LangChangeCommand):
+				if languageHandling.shouldMakeLangChangeCommand():
+					currentLocale = item.lang or defaultLocale
+				newSeq.append(item)
+			elif isinstance(item, str):
+				newSeq.append(
+					self._compressString(
+						item,
+						minCountSymbols,
+						minCountEmojis,
+						shouldProcessSymbols,
+						compressSymbolsEnabled,
+						compressEmojisEnabled,
+						currentLocale,
+					)
+				)
 			else:
 				newSeq.append(item)
 		return newSeq
-	
-	def _compressString(self, text, minCountSymbols, minCountEmojis, shouldProcessSymbols, compressSymbolsEnabled=True, compressEmojisEnabled=True):
+
+	def _compressString(self, text, minCountSymbols, minCountEmojis, shouldProcessSymbols, compressSymbolsEnabled=True, compressEmojisEnabled=True, locale=None):
 		if not text:
 			return text
 		
@@ -240,7 +259,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				
 				# Use minCountEmojis for emojis
 				if count >= minCountEmojis:
-					name = self._getName(normalizedEmoji)
+					name = self._getName(emojiSeq, locale)
 					if name:
 						result.append(f"{count} {name}")
 					else:
@@ -258,7 +277,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					j += 1
 				# Use minCountSymbols for symbols
 				if count >= minCountSymbols:
-					name = self._getName(char)
+					name = self._getName(char, locale)
 					if name:
 						result.append(f"{count} {name}")
 					else:
@@ -366,7 +385,30 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _isEmoji(self, c):
 		return self._isEmojiBase(c)
 	
-	def _getName(self, c):
+	def _getName(self, c, locale=None):
+		# Let NVDA provide the pronunciation for the active language. Its CLDR
+		# dictionary contains localized emoji names, while symbols.dic provides
+		# localized punctuation and other symbols.
+		if locale is None:
+			try:
+				locale = speech.getCurrentLanguage()
+			except Exception:
+				locale = "en"
+
+		candidates = [c]
+		normalized = self._normalizeEmoji(c)
+		if normalized and normalized != c:
+			candidates.append(normalized)
+		for candidate in candidates:
+			try:
+				localizedName = characterProcessing.processSpeechSymbol(locale, candidate)
+				if localizedName and localizedName != candidate:
+					return localizedName
+			except Exception:
+				# Keep a compatibility fallback for older NVDA releases or
+				# locales without a matching symbol/CLDR entry.
+				pass
+
 		names = {'.': 'dot', ',': 'comma', '!': 'exclamation', '?': 'question', ';': 'semicolon', ':': 'colon', '-': 'dash', '_': 'underscore', '=': 'equals', '+': 'plus', '*': 'asterisk', '/': 'slash', '\\': 'backslash', '<': 'less', '>': 'greater', '@': 'at', '#': 'hash', '$': 'dollar', '%': 'percent', '^': 'caret', '&': 'ampersand', '(': 'left paren', ')': 'right paren', '[': 'left bracket', ']': 'right bracket', '{': 'left brace', '}': 'right brace', '|': 'pipe', '"': 'quote', "'": 'apostrophe', '`': 'backtick', '~': 'tilde'}
 		if c in names:
 			return names[c]

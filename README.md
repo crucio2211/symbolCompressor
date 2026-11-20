@@ -5,7 +5,7 @@ Instead of hearing "exclamation exclamation exclamation", you'll hear "3 exclama
 
 - Add-on name: `symbolCompressor`
 - Author: Rosendo Barde Hubilla Junior
-- Current version: 3.0
+- Current version: 3.1
 - Minimum NVDA: 2021.1, Last tested: 2026.2
 
 ## Features
@@ -13,6 +13,8 @@ Instead of hearing "exclamation exclamation exclamation", you'll hear "3 exclama
 - Compress repeated punctuation: `!!!!` → "4 exclamation"
 - Compress repeated emojis: `😂😂😂😂` → "4 face with tears of joy"
 - Supports skin-tone modifiers, ZWJ sequences, and variation selectors
+- Uses NVDA's active speech language and localized symbol/Unicode CLDR dictionaries for punctuation and emoji names
+- Follows NVDA language-change commands when a speech sequence contains multiple languages
 - Emoji 17.0 support (7 new emojis + ballet dancer sequences)
 - Emoji 18.0 support (Unicode 18.0, September 2026) — 9 new emojis, 19 sequences:
   - Cracking face
@@ -38,6 +40,12 @@ So with Off, 3 emojis are spoken individually but 4+ become e.g.
 is currently not possible in NVDA.
 
 ## Changelog
+
+### 3.1
+
+- Localized compressed punctuation and emoji names using NVDA's built-in speech symbol processing and Unicode CLDR data.
+- Uses the active NVDA speech language and follows language-change commands in mixed-language speech sequences.
+- Retains a compatibility fallback for older NVDA versions or missing locale entries.
 
 ### 3.0
 

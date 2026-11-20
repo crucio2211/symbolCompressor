@@ -37,7 +37,7 @@ jobs:
           import re
 
           manifest = Path("manifest.ini").read_text(encoding="utf-8")
-          match = re.search(r"^version\\s*=\\s*(.+)$", manifest, re.MULTILINE)
+          match = re.search(r"^version\s*=\s*(.+)$", manifest, re.MULTILINE)
           if not match:
               raise SystemExit("Could not read add-on version from manifest.ini")
 
